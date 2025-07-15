@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.core.agent import build_graph
+from src.core.agent import AgentState, query_node
 from src.services.tripxplo_api import (
     get_packages, get_package_details, get_package_pricing,
     get_available_hotels, get_available_vehicles, get_available_activities
@@ -16,8 +16,6 @@ app = FastAPI(
     version=settings.APP_VERSION,
     description="AI-powered travel planning assistant for TripXplo"
 )
-
-graph = build_graph()
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,21 +34,25 @@ async def run_agent(request: QueryRequest):
     user_input = request.question
     logger.info(f"Received query: {user_input}")
 
-    state = {"messages": [{"role": "user", "content": user_input}]}
-    logger.info("Invoking AI graph with user input")
-
     try:
-        result = graph.invoke(state)
-        logger.info("AI graph invocation successful")
-
-        response_text = result["messages"][-1]["content"]
+        # Initialize state with user input
+        state = AgentState(messages=[{"role": "user", "content": user_input}])
+        
+        # Process query directly
+        result = query_node(state)
+        logger.info("Query processing successful")
+        
+        # Get response from the last message
+        response_text = result.messages[-1]["content"]
         logger.info(f"AI response generated: {response_text}")
-
+        
         return QueryResponse(response=response_text)
 
     except Exception as e:
-        logger.error(f"Error during AI invocation: {e}")
-        return QueryResponse(error="Something went wrong while processing your query.")
+        import traceback
+        logger.error(f"Error during query processing: {e}")
+        logger.error(traceback.format_exc())
+        return QueryResponse(response="", error=f"Error: {str(e)}")
 
 @app.get("/packages")
 async def fetch_packages():

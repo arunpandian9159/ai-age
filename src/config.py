@@ -2,7 +2,21 @@ import os
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv(".env.local")
+import logging
+logger = logging.getLogger(__name__)
+
+# Try to load from .env.local first, then .env
+env_files = [".env.local", ".env"]
+env_loaded = False
+
+for env_file in env_files:
+    if load_dotenv(env_file):
+        logger.info(f"Loaded environment variables from {env_file}")
+        env_loaded = True
+        break
+
+if not env_loaded:
+    logger.warning("No environment file found. Using system environment variables.")
 
 class Settings:
     # API Configuration
@@ -12,8 +26,8 @@ class Settings:
     
     # OpenRouter/OpenAI Configuration
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-    DEFAULT_MODEL = "deepseek/deepseek-chat"
+    OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
+    DEFAULT_MODEL = "deepseek/deepseek-chat-v3-0324"
     
     # FastAPI Configuration
     APP_NAME = "TripXplo AI"

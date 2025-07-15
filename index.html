@@ -248,6 +248,7 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         class ChatApp {
             constructor() {
@@ -335,8 +336,13 @@
             addMessage(text, type) {
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${type}`;
-                messageDiv.textContent = text;
-                
+                if (type === 'bot') {
+                    // Basic sanitization: allow only a safe subset of tags
+                    const html = marked.parse(text);
+                    messageDiv.innerHTML = html.replace(/<script.*?>.*?<\/script>/gi, '');
+                } else {
+                    messageDiv.textContent = text;
+                }
                 this.chatMessages.appendChild(messageDiv);
                 this.scrollToBottom();
             }

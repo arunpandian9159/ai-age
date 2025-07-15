@@ -18,9 +18,14 @@ if not OPENROUTER_API_KEY:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Debug log for API key and base URL
+logger.info(f"Using OpenRouter API key: {OPENROUTER_API_KEY[:8]}... (masked)")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+logger.info(f"Using OpenRouter base URL: {OPENROUTER_BASE_URL}")
+
 # Initialize OpenAI client with OpenRouter endpoint
 client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
+    base_url=OPENROUTER_BASE_URL,
     api_key=OPENROUTER_API_KEY
 )
 
@@ -36,7 +41,7 @@ def call_deepseek(prompt: str) -> str:
             model="deepseek/deepseek-chat",
             messages=[{"role": "user", "content": prompt}]
         )
-        content = res.choices[0].message.content
+        content = res.choices[0].message.content or ""
         logger.info("Received response from DeepSeek")
         return content
     except Exception as e:
@@ -72,24 +77,24 @@ def query_node(state: AgentState) -> AgentState:
         ])
 
         prompt = f"""
-The user asked about a destination: {user_query}
+                    The user asked about a destination: {user_query}
 
-Here are {len(matching_packages)} travel packages that match:
+                    Here are {len(matching_packages)} travel packages that match:
 
-{formatted_list}
+                    {formatted_list}
 
-Now write a helpful travel description for the destination based on these packages.
+                    Now write a helpful travel description for the destination based on these packages.
 
-✅ Highlight each destination as a section.
-✅ List each package with:
-   - Name
-   - Duration
-   - Highlights
-   - Starting Price
-   - ❗ Always include "Package ID: xyz" as a clear line.
-✅ Be warm, friendly, and easy to understand.
-✅ Do NOT skip the Package IDs.
-"""
+                    ✅ Highlight each destination as a section.
+                    ✅ List each package with:
+                    - Name
+                    - Duration
+                    - Highlights
+                    - Starting Price
+                    - ❗ Always include "Package ID: xyz" as a clear line.
+                    ✅ Be warm, friendly, and easy to understand.
+                    ✅ Do NOT skip the Package IDs.
+                    """
         response = call_deepseek(prompt)
 
     else:
@@ -104,17 +109,17 @@ Now write a helpful travel description for the destination based on these packag
         ])
 
         prompt = f"""
-The user asked: {user_query}
+                    The user asked: {user_query}
 
-Here are some of our most popular packages:
+                    Here are some of our most popular packages:
 
-{general_list}
+                    {general_list}
 
-Format them nicely for a general travel recommendation.
+                    Format them nicely for a general travel recommendation.
 
-✅ Show duration, starting price, and Package ID clearly.
-✅ Keep the tone inviting and helpful.
-"""
+                    ✅ Show duration, starting price, and Package ID clearly.
+                    ✅ Keep the tone inviting and helpful.
+                    """
         response = call_deepseek(prompt)
 
     logger.info("Appending assistant response to state messages")

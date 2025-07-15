@@ -1,17 +1,37 @@
-from openai import OpenAI
+import openai
 from langgraph.graph import StateGraph
 from pydantic import BaseModel
 from typing import List
 from ..services.tripxplo_api import get_packages
 from ..config import settings
 from ..utils.logger import setup_logger
+import os
+from dotenv import load_dotenv
 
 logger = setup_logger(__name__)
 
-# Initialize OpenAI client with OpenRouter endpoint
+# Load environment variables directly
+env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env.local')
+load_dotenv(env_file)
+
+api_key = os.getenv("OPENROUTER_API_KEY")
+if not api_key:
+    raise ValueError(f"OpenRouter API key not found in {env_file}")
+
+# Debug log for API key and base URL
+logger.info(f"Using OpenRouter API key: {api_key[:8]}... (masked)")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+logger.info(f"Using OpenRouter base URL: {OPENROUTER_BASE_URL}")
+
+# Initialize the client with the API key
+from openai import OpenAI
 client = OpenAI(
-    base_url=settings.OPENROUTER_BASE_URL,
-    api_key=settings.OPENROUTER_API_KEY
+    api_key=api_key,
+    base_url=OPENROUTER_BASE_URL,
+    default_headers={
+        "HTTP-Referer": "https://github.com/arunpandian9159/ai-age",
+        "X-Title": "TripXplo AI"
+    }
 )
 
 # LangGraph state class
@@ -28,7 +48,7 @@ def call_deepseek(prompt: str) -> str:
         )
         content = res.choices[0].message.content
         logger.info("Received response from DeepSeek")
-        return content
+        return content or ""
     except Exception as e:
         logger.error(f"DeepSeek API error: {e}")
         return f"DeepSeek error: {e}"
