@@ -1,143 +1,211 @@
-import openai
+import os
+import logging
+from openai import OpenAI
+from dotenv import load_dotenv
 from langgraph.graph import StateGraph
 from pydantic import BaseModel
 from typing import List
-from ..services.tripxplo_api import get_packages
-from ..config import settings
-from ..utils.logger import setup_logger
-import os
-from dotenv import load_dotenv
+from ..services.tripxplo_api import get_packages, get_available_hotels, get_available_vehicles, get_available_activities
 
-logger = setup_logger(__name__)
+# Load environment variables from .env.local
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env.local'))
 
-# Load environment variables directly
-env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env.local')
-load_dotenv(env_file)
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+if not OPENROUTER_API_KEY:
+    raise ValueError("Missing OpenRouter API key")
 
-api_key = os.getenv("OPENROUTER_API_KEY")
-if not api_key:
-    raise ValueError(f"OpenRouter API key not found in {env_file}")
+# Logger setup
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
-# Debug log for API key and base URL
-logger.info(f"Using OpenRouter API key: {api_key[:8]}... (masked)")
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-logger.info(f"Using OpenRouter base URL: {OPENROUTER_BASE_URL}")
+client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=OPENROUTER_API_KEY)
 
-# Initialize the client with the API key
-from openai import OpenAI
-client = OpenAI(
-    api_key=api_key,
-    base_url=OPENROUTER_BASE_URL,
-    default_headers={
-        "HTTP-Referer": "https://github.com/arunpandian9159/ai-age",
-        "X-Title": "TripXplo AI"
-    }
-)
-
-# LangGraph state class
 class AgentState(BaseModel):
     messages: List[dict]
 
-# DeepSeek call wrapper with logs
 def call_deepseek(prompt: str) -> str:
-    logger.info(f"Calling DeepSeek with prompt:\n{prompt}")
+    logger.info("Calling DeepSeek API")
     try:
         res = client.chat.completions.create(
-            model=settings.DEFAULT_MODEL,
+            model="deepseek/deepseek-chat",
             messages=[{"role": "user", "content": prompt}]
         )
-        content = res.choices[0].message.content
         logger.info("Received response from DeepSeek")
-        return content or ""
+        content = res.choices[0].message.content
+        return content if content is not None else ""
     except Exception as e:
         logger.error(f"DeepSeek API error: {e}")
         return f"DeepSeek error: {e}"
 
-# Core logic node for LangGraph
-def query_node(state: AgentState) -> AgentState:
-    user_query = state.messages[-1]["content"]
-    logger.info(f"query_node received user query: {user_query}")
-
-    packages = get_packages()
-    logger.info(f"Fetched {len(packages)} packages from API")
-
-    user_query_lower = user_query.lower()
-
-    # Try to match destination keyword in package name/description
-    matching_packages = [
-        p for p in packages if user_query_lower in p.get("packageName", "").lower()
-        or user_query_lower in p.get("description", "").lower()
+def extract_search_terms(query: str) -> str:
+    known_destinations = [
+        "goa", "kerala", "manali", "bali", "kodaikanal", "ooty",
+        "rajasthan", "andaman", "himachal", "shimla", "darjeeling"
     ]
+    query_lower = query.lower()
+    found_terms = [dest for dest in known_destinations if dest in query_lower]
+    if found_terms:
+        logger.info(f"Extracted search terms: {found_terms}")
+        return " ".join(found_terms)
+    logger.info("No known destinations found in query; using full query as search term")
+    return query
 
-    if matching_packages:
-        logger.info(f"Found {len(matching_packages)} matching packages")
+def detect_intent(query: str) -> str:
+    query_lower = query.lower()
+    if any(keyword in query_lower for keyword in ["hotel", "stay", "accommodation", "resort"]):
+        return "hotel"
+    if any(keyword in query_lower for keyword in ["vehicle", "car", "transport", "taxi"]):
+        return "vehicle"
+    if any(keyword in query_lower for keyword in ["activity", "tour", "things to do", "adventure", "experience"]):
+        return "activity"
+    return "package"
 
-        # More structured list for better AI formatting
-        formatted_list = "\n".join([
-            f"{i+1}. {p.get('packageName', 'N/A')}\n"
-            f"Duration: {p.get('noOfDays', 'N/A')}D/{p.get('noOfNight', 'N/A')}N\n"
-            f"Starting From: ₹{p.get('startFrom', 'N/A')}\n"
-            f"Package ID: {p.get('packageId', p.get('id', 'N/A'))}\n"
-            for i, p in enumerate(matching_packages[:5])
-        ])
+def format_packages(packages: list) -> str:
+    return "\n".join([
+        f"{i+1}. {p.get('packageName', 'N/A')} (ID: {p.get('packageId', p.get('id', 'N/A'))})"
+        for i, p in enumerate(packages[:5])
+    ])
 
-        prompt = f"""
-The user asked about a destination: {user_query}
+def query_node(state: AgentState) -> AgentState:
+    user_query = state.messages[-1]["content"].strip()
+    logger.info(f"Received user query (length {len(user_query)} chars)")
 
-Here are {len(matching_packages)} travel packages that match:
+    if len(user_query) < 5:
+        clarification = (
+            "Hi! Your query seems a bit short. Could you please provide more details? "
+            "For example, mention the destination, type of package, or any preferences."
+        )
+        state.messages.append({"role": "assistant", "content": clarification})
+        return state
+
+    intent = detect_intent(user_query)
+    logger.info(f"Detected intent: {intent}")
+
+    search_term = extract_search_terms(user_query)
+
+    if intent == "hotel":
+        logger.info(f"Fetching hotels with search term '{search_term}'")
+        hotels = get_available_hotels(search_term)
+        if hotels:
+            formatted_list = "\n".join([
+                f"{i+1}. {h.get('hotelName', 'N/A')} (ID: {h.get('hotelId', 'N/A')})"
+                for i, h in enumerate(hotels[:5])
+            ])
+            prompt = f"""
+You are a helpful travel assistant.
+
+The user asked about hotels: "{user_query}"
+
+Here are some hotel options matching your request:
 
 {formatted_list}
 
-Now write a helpful travel description for the destination based on these packages.
+Please provide a warm, clear, and friendly summary for these hotel options including name, highlights, price (if available), and Hotel ID.
 
-✅ Highlight each destination as a section.
-✅ List each package with:
-   - Name
-   - Duration
-   - Highlights
-   - Starting Price
-   - ❗ Always include "Package ID: xyz" as a clear line.
-✅ Be warm, friendly, and easy to understand.
-✅ Do NOT skip the Package IDs.
+End with a call to action encouraging booking or further questions.
 """
-        response = call_deepseek(prompt)
+            response = call_deepseek(prompt)
+        else:
+            response = "Sorry, I couldn't find hotels matching your request. Would you like me to suggest popular hotels instead?"
 
-    else:
-        logger.info("No destination matches found. Falling back to general package list")
+    elif intent == "vehicle":
+        logger.info(f"Fetching vehicles with search term '{search_term}'")
+        vehicles = get_available_vehicles(search_term)
+        if vehicles:
+            formatted_list = "\n".join([
+                f"{i+1}. {v.get('vehicleName', 'N/A')} (ID: {v.get('vehicleId', 'N/A')})"
+                for i, v in enumerate(vehicles[:5])
+            ])
+            prompt = f"""
+You are a helpful travel assistant.
 
-        general_list = "\n".join([
-            f"{i+1}. {p.get('packageName', 'N/A')}\n"
-            f"Duration: {p.get('noOfDays', 'N/A')}D/{p.get('noOfNight', 'N/A')}N\n"
-            f"Starting From: ₹{p.get('startFrom', 'N/A')}\n"
-            f"Package ID: {p.get('packageId', p.get('id', 'N/A'))}\n"
-            for i, p in enumerate(packages[:5])
-        ])
+The user asked about vehicles: "{user_query}"
 
-        prompt = f"""
-The user asked: {user_query}
+Here are some vehicle options matching your request:
 
-Here are some of our most popular packages:
+{formatted_list}
 
-{general_list}
+Please provide a friendly summary for these vehicles including name, type, price (if available), and Vehicle ID.
 
-Format them nicely for a general travel recommendation.
-
-✅ Show duration, starting price, and Package ID clearly.
-✅ Keep the tone inviting and helpful.
+End with a call to action encouraging booking or further questions.
 """
-        response = call_deepseek(prompt)
+            response = call_deepseek(prompt)
+        else:
+            response = "Sorry, I couldn't find vehicles matching your request. Would you like me to suggest popular vehicles instead?"
 
-    logger.info("Appending assistant response to state messages")
+    elif intent == "activity":
+        logger.info(f"Fetching activities with search term '{search_term}'")
+        activities = get_available_activities(search_term)
+        if activities:
+            formatted_list = "\n".join([
+                f"{i+1}. {a.get('activityName', 'N/A')} (ID: {a.get('activityId', 'N/A')})"
+                for i, a in enumerate(activities[:5])
+            ])
+            prompt = f"""
+                        You are a helpful travel assistant.
+
+                        The user asked about activities: "{user_query}"
+
+                        Here are some activity options matching your request:
+
+                        {formatted_list}
+
+                        Please provide a warm, engaging summary for these activities including name, highlights, price (if available), and Activity ID.
+
+                        End with a call to action encouraging booking or further questions.
+                        """
+            response = call_deepseek(prompt)
+        else:
+            response = "Sorry, I couldn't find activities matching your request. Would you like me to suggest popular activities instead?"
+
+    else:  # Default to package search
+        logger.info(f"Fetching packages with search term '{search_term}'")
+        packages = get_packages()
+        logger.info(f"Number of packages fetched: {len(packages)}")
+        if packages:
+            formatted_list = format_packages(packages)
+            prompt = f"""
+                        You are a helpful travel assistant.
+
+                        The user asked about packages: "{user_query}"
+
+                        Step-by-step:
+
+                        1. Identify the main destination or theme.
+                        2. Find the best matches from the packages below.
+                        3. Summarize each package with name, duration, highlights, price, and Package ID.
+                        4. Present warmly and clearly, grouped by destination if applicable.
+                        5. End with a friendly call to action.
+
+                        Here are the matching packages ({len(packages)} found):
+
+                        {formatted_list}
+                        """
+            response = call_deepseek(prompt)
+        else:
+            logger.info("No packages matched; providing popular packages")
+            general_packages = get_packages()
+            formatted_list = format_packages(general_packages)
+            prompt = f"""
+                        You are a helpful travel assistant.
+
+                        The user asked: "{user_query}"
+
+                        We couldn't find exact matches, but here are some popular travel packages:
+
+                        {formatted_list}
+
+                        Please format this as a friendly, inviting travel recommendation showing duration, price, and Package ID clearly.
+                        """
+            response = call_deepseek(prompt)
+
     state.messages.append({"role": "assistant", "content": response})
     return state
 
-# LangGraph setup
 def build_graph():
-    logger.info("Building StateGraph for agent")
     builder = StateGraph(AgentState)
     builder.add_node("query_node", query_node)
     builder.set_entry_point("query_node")
     builder.set_finish_point("query_node")
-    compiled_graph = builder.compile()
-    logger.info("StateGraph compiled successfully")
-    return compiled_graph
+    logger.info("Graph built successfully")
+    return builder.compile()

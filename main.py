@@ -1,58 +1,55 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.core.agent import AgentState, query_node
+from pydantic import BaseModel
+from src.core.agent import build_graph
 from src.services.tripxplo_api import (
     get_packages, get_package_details, get_package_pricing,
     get_available_hotels, get_available_vehicles, get_available_activities
 )
-from src.models.schemas import QueryRequest, QueryResponse
-from src.config import settings
-from src.utils.logger import setup_logger
 
-logger = setup_logger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
-    description="AI-powered travel planning assistant for TripXplo"
-)
+app = FastAPI()
+graph = build_graph()
 
+# CORS settings for dev - open to all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+class QueryRequest(BaseModel):
+    question: str
+
 @app.get("/")
 async def root():
     return {"message": "TripXplo AI API — POST /query with {'question': 'your query'}"}
 
-@app.post("/query", response_model=QueryResponse)
+@app.post("/query")
 async def run_agent(request: QueryRequest):
     user_input = request.question
     logger.info(f"Received query: {user_input}")
 
+    state = {"messages": [{"role": "user", "content": user_input}]}
+    logger.info("Invoking AI graph with user input")
+
     try:
-        # Initialize state with user input
-        state = AgentState(messages=[{"role": "user", "content": user_input}])
-        
-        # Process query directly
-        result = query_node(state)
-        logger.info("Query processing successful")
-        
-        # Get response from the last message
-        response_text = result.messages[-1]["content"]
+        result = graph.invoke(state)
+        logger.info("AI graph invocation successful")
+
+        response_text = result["messages"][-1]["content"]
         logger.info(f"AI response generated: {response_text}")
-        
-        return QueryResponse(response=response_text)
+
+        return {"response": response_text}
 
     except Exception as e:
-        import traceback
-        logger.error(f"Error during query processing: {e}")
-        logger.error(traceback.format_exc())
-        return QueryResponse(response="", error=f"Error: {str(e)}")
+        logger.error(f"Error during AI invocation: {e}")
+        return {"error": "Something went wrong while processing your query."}
 
 @app.get("/packages")
 async def fetch_packages():

@@ -3,151 +3,163 @@ import requests
 import logging
 from dotenv import load_dotenv
 
-load_dotenv(".env.local")
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env.local"))
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-API = "https://api.tripxplo.com/v1/api"
+API_BASE = "https://api.tripxplo.com/v1/api"
 EMAIL = os.getenv("TRIPXPLO_EMAIL")
 PASSWORD = os.getenv("TRIPXPLO_PASSWORD")
 
-TOKEN = None
+_token_cache = None
 
 def get_token():
-    global TOKEN
-    if TOKEN:
+    global _token_cache
+    if _token_cache:
         logger.info("Using cached token")
-        return TOKEN
+        return _token_cache
 
-    logger.info("Requesting new token from TripXplo API")
+    logger.info("Fetching new token from TripXplo API")
     try:
-        res = requests.put(f"{API}/admin/auth/login", json={"email": EMAIL, "password": PASSWORD})
-        res.raise_for_status()
-        TOKEN = res.json().get("accessToken")
-        if not TOKEN:
-            logger.error("No accessToken found in login response")
-            raise ValueError("Failed to get accessToken")
-        logger.info("Token retrieved successfully")
-        return TOKEN
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during token fetch: {e}")
-        raise
+        response = requests.put(
+            f"{API_BASE}/admin/auth/login",
+            json={"email": EMAIL, "password": PASSWORD}
+        )
+        response.raise_for_status()
+        _token_cache = response.json().get("accessToken")
+        if not _token_cache:
+            raise ValueError("No accessToken in login response")
+        logger.info(f"✅ Logged in successfully. JWT Token:\n{_token_cache}\n")
+        return _token_cache
     except Exception as e:
-        logger.error(f"Error getting token: {e}")
+        logger.error(f"Token fetch error: {e}")
+        _token_cache = None
         raise
 
 def get_packages():
     token = get_token()
-    logger.info("Fetching packages from TripXplo API")
+    params = {"limit": 100, "offset": 0}
     try:
-        res = requests.get(
-            f"{API}/admin/package?limit=50&offset=0",
-            headers={"Authorization": f"Bearer {token}"}
+        response = requests.get(
+            f"{API_BASE}/admin/package",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params
         )
-        res.raise_for_status()
-        packages = res.json().get("result", {}).get("docs", [])
+        response.raise_for_status()
+        packages = response.json().get("result", {}).get("docs", [])
         logger.info(f"Fetched {len(packages)} packages")
         return packages
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during packages fetch: {e}")
-        return []
     except Exception as e:
-        logger.error(f"Unexpected error during packages fetch: {e}")
+        logger.error(f"Error fetching packages: {e}")
         return []
 
-def get_package_details(package_id):
+def get_package_details(package_id: str):
     token = get_token()
-    logger.info(f"Fetching details for package_id={package_id}")
     try:
-        res = requests.get(
-            f"{API}/admin/package/{package_id}",
+        response = requests.get(
+            f"{API_BASE}/admin/package/{package_id}",
             headers={"Authorization": f"Bearer {token}"}
         )
-        res.raise_for_status()
-        details = res.json().get("result", {})
-        logger.info(f"Fetched package details for {package_id}")
+        response.raise_for_status()
+        details = response.json().get("result", {})
+        logger.info(f"Fetched details for package {package_id}")
         return details
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during package details fetch: {e}")
-        return {}
     except Exception as e:
-        logger.error(f"Unexpected error during package details fetch: {e}")
+        logger.error(f"Error fetching package details: {e}")
         return {}
 
-def get_package_pricing(package_id, params):
+def get_package_pricing(package_id: str, params: dict):
     token = get_token()
-    logger.info(f"Fetching pricing for package_id={package_id} with params={params}")
     try:
-        res = requests.post(
-            f"{API}/admin/package/{package_id}/pricing",
+        response = requests.post(
+            f"{API_BASE}/admin/package/{package_id}/pricing",
             json=params,
             headers={"Authorization": f"Bearer {token}"}
         )
-        res.raise_for_status()
-        pricing = res.json().get("result", {})
-        logger.info(f"Fetched pricing for package {package_id}")
+        response.raise_for_status()
+        pricing = response.json().get("result", {})
+        logger.info(f"Fetched pricing for package {package_id} with params {params}")
         return pricing
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during package pricing fetch: {e}")
-        return {}
     except Exception as e:
-        logger.error(f"Unexpected error during package pricing fetch: {e}")
+        logger.error(f"Error fetching package pricing: {e}")
         return {}
 
-def get_available_hotels(package_id):
+def get_available_hotels(package_id: str):
     token = get_token()
-    logger.info(f"Fetching available hotels for package_id={package_id}")
     try:
-        res = requests.get(
-            f"{API}/admin/package/{package_id}/hotels",
+        response = requests.get(
+            f"{API_BASE}/admin/package/{package_id}/available/get",
             headers={"Authorization": f"Bearer {token}"}
         )
-        res.raise_for_status()
-        hotels = res.json().get("result", [])
+        response.raise_for_status()
+        hotels = response.json().get("result", [])
         logger.info(f"Fetched {len(hotels)} hotels for package {package_id}")
         return hotels
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during hotels fetch: {e}")
-        return []
     except Exception as e:
-        logger.error(f"Unexpected error during hotels fetch: {e}")
+        logger.error(f"Error fetching hotels: {e}")
         return []
 
-def get_available_vehicles(package_id):
+def get_available_vehicles(package_id: str):
     token = get_token()
-    logger.info(f"Fetching available vehicles for package_id={package_id}")
     try:
-        res = requests.get(
-            f"{API}/admin/package/{package_id}/vehicles",
+        response = requests.get(
+            f"{API_BASE}/admin/package/{package_id}/vehicle/get",
             headers={"Authorization": f"Bearer {token}"}
         )
-        res.raise_for_status()
-        vehicles = res.json().get("result", [])
+        response.raise_for_status()
+        vehicles = response.json().get("result", [])
         logger.info(f"Fetched {len(vehicles)} vehicles for package {package_id}")
         return vehicles
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during vehicles fetch: {e}")
-        return []
     except Exception as e:
-        logger.error(f"Unexpected error during vehicles fetch: {e}")
+        logger.error(f"Error fetching vehicles: {e}")
         return []
 
-def get_available_activities(package_id):
+def get_available_activities(package_id: str):
     token = get_token()
-    logger.info(f"Fetching available activities for package_id={package_id}")
     try:
-        res = requests.get(
-            f"{API}/admin/package/{package_id}/activities",
+        response = requests.get(
+            f"{API_BASE}/admin/package/{package_id}/activity/get",
             headers={"Authorization": f"Bearer {token}"}
         )
-        res.raise_for_status()
-        activities = res.json().get("result", [])
+        response.raise_for_status()
+        activities = response.json().get("result", [])
         logger.info(f"Fetched {len(activities)} activities for package {package_id}")
         return activities
-    except requests.RequestException as e:
-        logger.error(f"HTTP error during activities fetch: {e}")
-        return []
     except Exception as e:
-        logger.error(f"Unexpected error during activities fetch: {e}")
+        logger.error(f"Error fetching activities: {e}")
+        return []
+
+def get_interests():
+    token = get_token()
+    try:
+        response = requests.get(
+            f"{API_BASE}/admin/package/interest/get",
+            headers={"Authorization": f"Bearer {token}"}
+        )
+        response.raise_for_status()
+        interests = response.json().get("result", [])
+        logger.info(f"Fetched {len(interests)} interests")
+        return interests
+    except Exception as e:
+        logger.error(f"Error fetching interests: {e}")
+        return []
+
+def search_destinations(search: str = ""):
+    token = get_token()
+    params = {}
+    if search:
+        params["search"] = search
+    try:
+        response = requests.get(
+            f"{API_BASE}/admin/package/destination/search",
+            headers={"Authorization": f"Bearer {token}"},
+            params=params
+        )
+        response.raise_for_status()
+        destinations = response.json().get("result", [])
+        logger.info(f"Fetched {len(destinations)} destinations with search='{search}'")
+        return destinations
+    except Exception as e:
+        logger.error(f"Error searching destinations: {e}")
         return []
