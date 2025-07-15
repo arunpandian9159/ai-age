@@ -51,17 +51,20 @@ ai-age/
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <repository-url>
    cd ai-age
    ```
 
 2. **Install dependencies**
+
    ```bash
    pip install -r requirements.txt
    ```
 
 3. **Set up environment variables**
+
    ```bash
    # Copy the environment template
    copy .env.example .env.local
@@ -75,6 +78,7 @@ ai-age/
    ⚠️ **SECURITY WARNING**: Never commit `.env.local` or any file containing API keys to version control!
 
 4. **Start the backend server**
+
    ```bash
    # Method 1: Using the runner script
    python run.py
@@ -119,6 +123,7 @@ See [frontend/README.md](frontend/README.md) for frontend-specific information.
 ### Running in Development Mode
 
 1. **Backend** (with auto-reload):
+
    ```bash
    cd backend
    uvicorn main:app --reload
