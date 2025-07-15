@@ -16,14 +16,28 @@ A comprehensive AI-powered travel assistant that helps users discover travel pac
 
 ```
 ai-age/
-├── backend/           # FastAPI backend with AI agent
-│   ├── main.py       # Main FastAPI application
-│   ├── agent.py      # AI agent implementation
-│   ├── tripxplo_api.py # Travel API integration
-│   └── api/          # API endpoints
-├── frontend/         # Simple HTML/CSS/JS frontend
-│   └── index.html    # Single-page chat interface
-└── requirements.txt  # Python dependencies
+├── src/
+│   ├── api/           # API route handlers
+│   │   ├── auth.py    # Authentication utilities
+│   │   └── packages.py # Package-related endpoints
+│   ├── core/          # Core business logic
+│   │   └── agent.py   # AI agent implementation
+│   ├── models/        # Pydantic models and schemas
+│   │   └── schemas.py # Data models
+│   ├── services/      # External service integrations
+│   │   └── tripxplo_api.py # TripXplo API integration
+│   ├── utils/         # Utility functions
+│   │   └── logger.py  # Logging utilities
+│   └── config.py      # Application configuration
+├── scripts/           # Deployment and utility scripts
+│   ├── install.bat    # Windows installation script
+│   └── start.bat      # Windows start script
+├── main.py           # FastAPI application entry point
+├── run.py            # Development server runner
+├── index.html        # Frontend chat interface
+├── requirements.txt  # Python dependencies
+├── .env.example      # Environment variables template
+└── README.md         # This file
 ```
 
 ## 🚀 Quick Start
@@ -48,19 +62,30 @@ ai-age/
    ```
 
 3. **Set up environment variables**
-   Create a `.env` file in the backend directory with:
-   ```
-   OPENAI_API_KEY=your_openai_api_key_here
+   ```bash
+   # Copy the environment template
+   copy .env.example .env.local
+   
+   # Edit .env.local with your credentials:
+   # TRIPXPLO_EMAIL=your_email@example.com
+   # TRIPXPLO_PASSWORD=your_password
+   # OPENROUTER_API_KEY=your_openrouter_api_key
    ```
 
 4. **Start the backend server**
    ```bash
-   cd backend
+   # Method 1: Using the runner script
+   python run.py
+   
+   # Method 2: Using uvicorn directly
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   
+   # Method 3: Using batch script (Windows)
+   scripts\start.bat
    ```
 
 5. **Open the frontend**
-   Open `frontend/index.html` in your web browser
+   Open `index.html` in your web browser
 
 ## 📖 Usage
 
@@ -105,7 +130,11 @@ See [frontend/README.md](frontend/README.md) for frontend-specific information.
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for AI functionality | Yes |
+| `TRIPXPLO_EMAIL` | TripXplo account email | Yes |
+| `TRIPXPLO_PASSWORD` | TripXplo account password | Yes |
+| `OPENROUTER_API_KEY` | OpenRouter API key for AI functionality | Yes |
+| `DEBUG` | Enable debug mode (True/False) | No |
+| `LOG_LEVEL` | Logging level (DEBUG/INFO/WARNING/ERROR) | No |
 
 ### API Configuration
 

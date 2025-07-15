@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  tripxplo-ai:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - TRIPXPLO_EMAIL=${TRIPXPLO_EMAIL}
+      - TRIPXPLO_PASSWORD=${TRIPXPLO_PASSWORD}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - DEBUG=False
+      - LOG_LEVEL=INFO
+    volumes:
+      - .:/app
+    restart: unless-stopped

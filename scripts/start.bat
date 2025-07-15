@@ -1,0 +1,3 @@
+@echo off
+echo Starting TripXplo AI Server...
+python run.py
