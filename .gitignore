@@ -1,7 +1,11 @@
-# Environment variables
-.env
+# Environment variables (NEVER commit these!)
+.env*
+!.env.example
 .env.local
 .env.production
+.env.development
+.env.staging
+*.env
 
 # Python
 __pycache__/

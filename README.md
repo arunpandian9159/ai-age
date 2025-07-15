@@ -71,6 +71,8 @@ ai-age/
    # TRIPXPLO_PASSWORD=your_password
    # OPENROUTER_API_KEY=your_openrouter_api_key
    ```
+   
+   ⚠️ **SECURITY WARNING**: Never commit `.env.local` or any file containing API keys to version control!
 
 4. **Start the backend server**
    ```bash
@@ -123,6 +125,20 @@ See [frontend/README.md](frontend/README.md) for frontend-specific information.
    ```
 
 2. **Frontend**: Simply open `frontend/index.html` in your browser
+
+## 🔒 Security
+
+### Environment Variables Security
+- **NEVER** commit `.env.local` or any environment files containing secrets to version control
+- Use `.env.example` as a template for required variables
+- The `.gitignore` file is configured to exclude all `.env*` files except `.env.example`
+- If you accidentally commit API keys, immediately revoke them and generate new ones
+
+### API Key Management
+- Store API keys securely in environment variables
+- Use different API keys for development, staging, and production
+- Regularly rotate API keys
+- Monitor API key usage for suspicious activity
 
 ## 🔧 Configuration
 
