@@ -15,6 +15,7 @@ An AI-powered travel planning assistant that integrates with the TripXplo API to
 
 ## 🏗️ Architecture
 
+```
 ai-age/
 ├── src/                    # Core application source
 │   ├── core/
@@ -37,6 +38,7 @@ ai-age/
 ├── Dockerfile             # Container configuration
 ├── docker-compose.yml     # Multi-service orchestration
 └── requirements.txt       # Python dependencies
+```
 
 ## 🚀 Quick Start
 
