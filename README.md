@@ -15,7 +15,6 @@ An AI-powered travel planning assistant that integrates with the TripXplo API to
 
 ## 🏗️ Architecture
 
-![Architecture Diagram](https://github.com/ai-age/tripxplo/blob/main/docs/architecture.png)
 ai-age/
 ├── src/                    # Core application source
 │   ├── core/
